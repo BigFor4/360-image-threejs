@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        #container {
+            width: 100%;
+            height: 100%;
+        }
+
+        #distanceDisplay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            font-family: Arial, sans-serif;
+            z-index: 1000;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container"></div>
+    <div id="distanceDisplay">Click on two points to measure distance</div>
+
+    <script src="//cdnjs.cloudflare.com/ajax/libs/three.js/105/three.js"></script>
+    <script src="//cdn.jsdelivr.net/npm/panolens@0.11.0/build/panolens.min.js"></script>
+
+    <script>
+        var panorama, viewer, container, infospot, infospot2;
+        var points = [];
+        var distanceDisplay = document.getElementById('distanceDisplay');
+        var line;
+        var label;
+
+        container = document.querySelector('#container');
+
+        panorama = new PANOLENS.ImagePanorama('./imag360.jpg');
+
+        viewer = new PANOLENS.Viewer({
+            container: container
+        });
+        viewer.add(panorama);
+
+        // Raycaster and mouse for clicking
+        var raycaster = new THREE.Raycaster();
+        var mouse = new THREE.Vector2();
+
+        function createSphereAt(point, color) {
+            const geometry = new THREE.SphereGeometry(50, 32, 32);
+            const material = new THREE.MeshBasicMaterial({ color: color });
+            const sphere = new THREE.Mesh(geometry, material);
+            sphere.position.copy(point);
+            panorama.add(sphere);
+        }
+
+        function createLineBetween(point1, point2) {
+            const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
+            const geometry = new THREE.BufferGeometry().setFromPoints([point1, point2]);
+            const line = new THREE.Line(geometry, material);
+            panorama.add(line);
+            return line;
+        }
+
+        function createLabelAt(position, text) {
+            const div = document.createElement('div');
+            div.style.position = 'absolute';
+            div.style.color = 'white';
+            div.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+            div.style.padding = '5px';
+            div.style.borderRadius = '5px';
+            div.style.transform = 'translate(-50%, -50%)';
+            div.textContent = text;
+            document.body.appendChild(div);
+
+            function updateLabelPosition() {
+                const vector = position.clone().project(viewer.camera);
+                const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-vector.y * 0.5 + 0.5) * window.innerHeight;
+                div.style.left = `${x}px`;
+                div.style.top = `${y}px`;
+            }
+
+            viewer.addUpdateCallback(updateLabelPosition);
+            return div;
+        }
+
+        function onPanoramaClick(event) {
+            // Get mouse position
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Raycast to find intersection point
+            raycaster.setFromCamera(mouse, viewer.camera);
+            const intersects = raycaster.intersectObject(panorama, true);
+
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                points.push(point);
+
+                // Add a sphere marker at the clicked point
+                createSphereAt(point, 0x00ff00);
+
+                // Calculate distance and draw line if there are two points
+                if (points.length === 2) {
+                    const distance = points[0].distanceTo(points[1]);
+                    distanceDisplay.textContent = `Distance: ${distance.toFixed(2)} units`;
+
+                    // Draw a line between the two points
+                    line = createLineBetween(points[0], points[1]);
+
+                    // Create a label in the middle of the line
+                    const midpoint = new THREE.Vector3().addVectors(points[0], points[1]).multiplyScalar(0.5);
+                    label = createLabelAt(midpoint, `${(distance / 1000).toFixed(2)} m`);
+
+                    // Reset points array for the next measurement
+                    points = [];
+                }
+            }
+        }
+
+        // Add click event listener
+        container.addEventListener('click', onPanoramaClick);
+    </script>
+</body>
+
+</html>
