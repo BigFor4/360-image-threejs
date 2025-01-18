@@ -62,9 +62,11 @@
         var mouse = new THREE.Vector2();
         var points = [];
         var currentMode = null;
+        var temporaryPoint = null;
+        var temporaryLine = null;
         var lineGroup = new THREE.Group();
         var distanceDisplay = document.getElementById('distanceDisplay');
-        
+
         container = document.querySelector('#container');
 
         panorama = new PANOLENS.ImagePanorama('./imag360.jpg');
@@ -114,7 +116,13 @@
             return div;
         }
 
-        function onPanoramaMouseDown(event) {
+        function clearGroup(group) {
+            while (group.children.length > 0) {
+                group.remove(group.children[0]);
+            }
+        }
+
+        function onPanoramaMouseMove(event) {
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -124,37 +132,62 @@
             if (intersects.length > 0) {
                 const point = intersects[0].point;
 
-                if (currentMode === 'line') {
-                    points.push(point);
-                    createSphereAt(point, 0x00ff00);
+                // Update temporary point
+                if (!temporaryPoint) {
+                    temporaryPoint = new THREE.Mesh(
+                        new THREE.SphereGeometry(30, 16, 16),
+                        new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+                    );
+                    panorama.add(temporaryPoint);
+                }
+                temporaryPoint.position.copy(point);
 
-                    if (points.length > 1) {
-                        const lastPoint = points[points.length - 2];
-                        createLineBetween(lastPoint, point);
-
-                        const distance = lastPoint.distanceTo(point) / 1000;
-                        const midpoint = new THREE.Vector3().addVectors(lastPoint, point).multiplyScalar(0.5);
-                        createLabelAt(midpoint, `${distance.toFixed(2)} m`);
+                // Update temporary line
+                if (points.length > 0) {
+                    if (temporaryLine) {
+                        lineGroup.remove(temporaryLine);
                     }
-                } else if (currentMode === 'polygon') {
-                    if (points.length > 0 && point.distanceTo(points[0]) < 100) {
-                        // Close the polygon
-                        createLineBetween(points[points.length - 1], points[0]);
-                        points = [];
-                        currentMode = null;
-                    } else {
-                        points.push(point);
-                        createSphereAt(point, points.length === 1 ? 0xff0000 : 0x00ff00);
+                    temporaryLine = createLineBetween(points[points.length - 1], point);
+                }
+            }
+        }
 
-                        if (points.length > 1) {
-                            const lastPoint = points[points.length - 2];
-                            createLineBetween(lastPoint, point);
+        function onPanoramaMouseDown(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-                            const distance = lastPoint.distanceTo(point) / 1000;
-                            const midpoint = new THREE.Vector3().addVectors(lastPoint, point).multiplyScalar(0.5);
-                            createLabelAt(midpoint, `${distance.toFixed(2)} m`);
-                        }
-                    }
+            raycaster.setFromCamera(mouse, viewer.camera);
+            const intersects = raycaster.intersectObject(panorama, true);
+
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                points.push(point);
+
+                createSphereAt(point, points.length === 1 ? 0xff0000 : 0x00ff00);
+
+                if (points.length > 1) {
+                    const lastPoint = points[points.length - 2];
+                    createLineBetween(lastPoint, point);
+
+                    const distance = lastPoint.distanceTo(point) / 1000;
+                    const midpoint = new THREE.Vector3().addVectors(lastPoint, point).multiplyScalar(0.5);
+                    createLabelAt(midpoint, `${distance.toFixed(2)} m`);
+                }
+            }
+        }
+
+        function onPanoramaDoubleClick() {
+            if (currentMode === 'line' || currentMode === 'polygon') {
+                points = [];
+                currentMode = null;
+                distanceDisplay.textContent = "Drawing finished.";
+                if (temporaryPoint) {
+                    panorama.remove(temporaryPoint);
+                    temporaryPoint = null;
+                }
+                if (temporaryLine) {
+                    lineGroup.remove(temporaryLine);
+                    temporaryLine = null;
                 }
             }
         }
@@ -162,14 +195,16 @@
         function activateMode(mode) {
             currentMode = mode;
             points = [];
-            lineGroup.clear();
+            clearGroup(lineGroup);
             distanceDisplay.textContent = `Mode: ${mode}`;
         }
 
         document.getElementById('drawLine').addEventListener('click', () => activateMode('line'));
         document.getElementById('drawPolygon').addEventListener('click', () => activateMode('polygon'));
 
+        container.addEventListener('mousemove', onPanoramaMouseMove);
         container.addEventListener('mousedown', onPanoramaMouseDown);
+        container.addEventListener('dblclick', onPanoramaDoubleClick);
     </script>
 </body>
 
