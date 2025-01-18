@@ -51,6 +51,7 @@
     <div id="controls">
         <button id="drawLine">Draw Line</button>
         <button id="drawPolygon">Draw Polygon</button>
+        <button id="clearAll">Clear</button>
     </div>
 
     <script src="//cdnjs.cloudflare.com/ajax/libs/three.js/105/three.js"></script>
@@ -65,6 +66,9 @@
         var temporaryPoint = null;
         var temporaryLine = null;
         var lineGroup = new THREE.Group();
+        var sphereGroup = new THREE.Group();
+        var labelGroup = [];
+        let isDraw = false;
         var distanceDisplay = document.getElementById('distanceDisplay');
 
         container = document.querySelector('#container');
@@ -76,13 +80,14 @@
         });
         viewer.add(panorama);
         panorama.add(lineGroup);
+        panorama.add(sphereGroup);
 
         function createSphereAt(point, color) {
             const geometry = new THREE.SphereGeometry(50, 32, 32);
             const material = new THREE.MeshBasicMaterial({ color: color });
             const sphere = new THREE.Mesh(geometry, material);
             sphere.position.copy(point);
-            panorama.add(sphere);
+            sphereGroup.add(sphere);
         }
 
         function createLineBetween(point1, point2) {
@@ -113,7 +118,26 @@
             }
 
             viewer.addUpdateCallback(updateLabelPosition);
+            labelGroup.push(div);
             return div;
+        }
+
+        function clearAll() {
+            clearGroup(lineGroup);
+            clearGroup(sphereGroup);
+            labelGroup.forEach(label => label.remove());
+            labelGroup = [];
+            points = [];
+            currentMode = null;
+            distanceDisplay.textContent = "All cleared.";
+            if (temporaryPoint) {
+                panorama.remove(temporaryPoint);
+                temporaryPoint = null;
+            }
+            if (temporaryLine) {
+                lineGroup.remove(temporaryLine);
+                temporaryLine = null;
+            }
         }
 
         function clearGroup(group) {
@@ -122,7 +146,24 @@
             }
         }
 
+        function finishDrawing() {
+            points = [];
+            currentMode = null;
+            distanceDisplay.textContent = "Drawing finished.";
+            if (temporaryPoint) {
+                panorama.remove(temporaryPoint);
+                temporaryPoint = null;
+            }
+            if (temporaryLine) {
+                lineGroup.remove(temporaryLine);
+                temporaryLine = null;
+            }
+        }
+
         function onPanoramaMouseMove(event) {
+            isDraw = false;
+            if (!currentMode) return;
+
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -132,7 +173,6 @@
             if (intersects.length > 0) {
                 const point = intersects[0].point;
 
-                // Update temporary point
                 if (!temporaryPoint) {
                     temporaryPoint = new THREE.Mesh(
                         new THREE.SphereGeometry(30, 16, 16),
@@ -142,7 +182,6 @@
                 }
                 temporaryPoint.position.copy(point);
 
-                // Update temporary line
                 if (points.length > 0) {
                     if (temporaryLine) {
                         lineGroup.remove(temporaryLine);
@@ -152,58 +191,56 @@
             }
         }
 
-        function onPanoramaMouseDown(event) {
+        function onPanoramaMouseUp(event) {
+            if (!currentMode || !isDraw) return;
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
             raycaster.setFromCamera(mouse, viewer.camera);
             const intersects = raycaster.intersectObject(panorama, true);
-
             if (intersects.length > 0) {
                 const point = intersects[0].point;
+                if (currentMode === 'polygon' && points.length > 2) {
+                    const distanceToFirst = point.distanceTo(points[0]);
+                    if (distanceToFirst < 100) {
+                        createLineBetween(points[points.length - 1], points[0]);
+                        finishDrawing();
+                        return;
+                    }
+                }
                 points.push(point);
-
                 createSphereAt(point, points.length === 1 ? 0xff0000 : 0x00ff00);
-
                 if (points.length > 1) {
                     const lastPoint = points[points.length - 2];
                     createLineBetween(lastPoint, point);
-
                     const distance = lastPoint.distanceTo(point) / 1000;
                     const midpoint = new THREE.Vector3().addVectors(lastPoint, point).multiplyScalar(0.5);
                     createLabelAt(midpoint, `${distance.toFixed(2)} m`);
                 }
             }
         }
+        function onPanoramaMouseDown(event) {
+            isDraw = true;
+        }
 
         function onPanoramaDoubleClick() {
-            if (currentMode === 'line' || currentMode === 'polygon') {
-                points = [];
-                currentMode = null;
-                distanceDisplay.textContent = "Drawing finished.";
-                if (temporaryPoint) {
-                    panorama.remove(temporaryPoint);
-                    temporaryPoint = null;
-                }
-                if (temporaryLine) {
-                    lineGroup.remove(temporaryLine);
-                    temporaryLine = null;
-                }
+            if (currentMode === 'line') {
+                finishDrawing();
             }
         }
 
         function activateMode(mode) {
             currentMode = mode;
             points = [];
-            clearGroup(lineGroup);
             distanceDisplay.textContent = `Mode: ${mode}`;
         }
 
         document.getElementById('drawLine').addEventListener('click', () => activateMode('line'));
         document.getElementById('drawPolygon').addEventListener('click', () => activateMode('polygon'));
+        document.getElementById('clearAll').addEventListener('click', clearAll);
 
         container.addEventListener('mousemove', onPanoramaMouseMove);
         container.addEventListener('mousedown', onPanoramaMouseDown);
+        container.addEventListener('mouseup', onPanoramaMouseUp);
         container.addEventListener('dblclick', onPanoramaDoubleClick);
     </script>
 </body>
