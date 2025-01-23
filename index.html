@@ -52,6 +52,12 @@
         <button id="drawLine">Draw Line</button>
         <button id="drawPolygon">Draw Polygon</button>
         <button id="clearAll">Clear</button>
+        <button onclick="captureFace('front')">Chụp mặt trước</button>
+        <button onclick="captureFace('back')">Chụp mặt sau</button>
+        <button onclick="captureFace('left')">Chụp mặt trái</button>
+        <button onclick="captureFace('right')">Chụp mặt phải</button>
+        <button onclick="captureFace('top')">Chụp mặt trên</button>
+        <button onclick="captureFace('bottom')">Chụp mặt dưới</button>
     </div>
 
     <script src="//cdnjs.cloudflare.com/ajax/libs/three.js/105/three.js"></script>
@@ -234,10 +240,42 @@
             distanceDisplay.textContent = `Mode: ${mode}`;
         }
 
+        function captureFace(face) {
+            const camera = viewer.camera;
+            const renderer = viewer.getRenderer();
+            const scene = viewer.getScene();
+            switch (face) {
+                case 'front':
+                    camera.rotation.set(0, 0, 0);
+                    break;
+                case 'back':
+                    camera.rotation.set(0, Math.PI, 0);
+                    break;
+                case 'left':
+                    camera.rotation.set(0, -Math.PI / 2, 0);
+                    break;
+                case 'right':
+                    camera.rotation.set(0, Math.PI / 2, 0);
+                    break;
+                case 'top':
+                    camera.rotation.set(Math.PI / 2, 0, 0);
+                    break;
+                case 'bottom':
+                    camera.rotation.set(-Math.PI / 2, 0, 0);
+                    break;
+            }
+            camera.updateProjectionMatrix();
+            viewer.tweenControlCenter(new THREE.Vector3(), 0);
+            renderer.render(scene, camera);
+            const dataURL = renderer.domElement.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.href = dataURL;
+            link.download = `${face}.png`;
+            link.click();
+        }
         document.getElementById('drawLine').addEventListener('click', () => activateMode('line'));
         document.getElementById('drawPolygon').addEventListener('click', () => activateMode('polygon'));
         document.getElementById('clearAll').addEventListener('click', clearAll);
-
         container.addEventListener('mousemove', onPanoramaMouseMove);
         container.addEventListener('mousedown', onPanoramaMouseDown);
         container.addEventListener('mouseup', onPanoramaMouseUp);
